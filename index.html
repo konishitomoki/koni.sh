@@ -5,8 +5,229 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>koni.sh</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #111827; /* bg-gray-900 equivalent */
+    }
+
+    .container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      perspective: 1000px;
+      position: relative;
+      z-index: 10;
+    }
+
+    .text {
+      font-size: 4rem;
+      font-weight: bold;
+      color: white;
+      transform-style: preserve-3d;
+      transition: transform 0.1s ease-out;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+  </style>
 </head>
-<body class="flex items-center justify-center min-h-screen bg-gray-900">
-  <h1 class="text-6xl font-bold text-white">koni.sh</h1>
+<body>
+  <canvas id="background"></canvas>
+  <div class="container">
+    <h1 class="text">koni.sh</h1>
+  </div>
+
+  <script>
+    // Text tilting based on device orientation or mouse position
+    const text = document.querySelector('.text');
+    const container = document.querySelector('.container');
+
+    // Constants for controlling tilt
+    const maxTiltX = 20; // max tilt in degrees
+    const maxTiltY = 20; // max tilt in degrees
+
+    // Function to handle mouse movement for desktop
+    function handleMouseMove(event) {
+      const containerRect = container.getBoundingClientRect();
+      const centerX = containerRect.left + containerRect.width / 2;
+      const centerY = containerRect.top + containerRect.height / 2;
+
+      // Calculate percentage distance from center (-1 to 1)
+      const percentX = (event.clientX - centerX) / (containerRect.width / 2);
+      const percentY = (event.clientY - centerY) / (containerRect.height / 2);
+
+      // Apply tilt (reversed Y for natural feel)
+      updateTilt(-percentY * maxTiltY, percentX * maxTiltX);
+    }
+
+    // Function to handle device orientation for mobile
+    function handleDeviceOrientation(event) {
+      if (!event.gamma || !event.beta) return;
+
+      // Get rotation degrees and normalize (-1 to 1)
+      const tiltX = Math.max(Math.min(event.beta / 45, 1), -1);
+      const tiltY = Math.max(Math.min(event.gamma / 45, 1), -1);
+
+      // Apply tilt
+      updateTilt(tiltX * maxTiltX, tiltY * maxTiltY);
+    }
+
+    // Function to update the tilt
+    function updateTilt(tiltX, tiltY) {
+      text.style.transform = `rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
+    }
+
+    // Check if device orientation is available
+    let usingDeviceOrientation = false;
+
+    if (window.DeviceOrientationEvent) {
+      // We need to request permission on iOS 13+
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        // Add a button to request permission
+        const permissionButton = document.createElement('button');
+        permissionButton.className = 'absolute top-4 right-4 bg-white bg-opacity-20 text-white px-4 py-2 rounded';
+        permissionButton.textContent = 'Enable Tilt';
+        permissionButton.addEventListener('click', () => {
+          DeviceOrientationEvent.requestPermission()
+            .then(response => {
+              if (response === 'granted') {
+                window.addEventListener('deviceorientation', handleDeviceOrientation);
+                usingDeviceOrientation = true;
+                permissionButton.remove();
+              }
+            })
+            .catch(console.error);
+        });
+        document.body.appendChild(permissionButton);
+      } else {
+        // For non-iOS devices, try to use device orientation directly
+        window.addEventListener('deviceorientation', function(event) {
+          if (event.gamma && event.beta && !usingDeviceOrientation) {
+            usingDeviceOrientation = true;
+            window.addEventListener('deviceorientation', handleDeviceOrientation);
+          }
+        }, { once: true });
+      }
+    }
+
+    // Default to mouse movement for desktop
+    window.addEventListener('mousemove', handleMouseMove);
+
+    // Animated background using Canvas
+    const canvas = document.getElementById('background');
+    const ctx = canvas.getContext('2d');
+
+    // Set canvas size
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Create particles
+    const particles = [];
+    const particleCount = 100;
+
+    class Particle {
+      constructor() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.size = Math.random() * 3 + 1;
+        this.speedX = Math.random() * 1 - 0.5;
+        this.speedY = Math.random() * 1 - 0.5;
+        this.opacity = Math.random() * 0.5 + 0.1;
+
+        // Add slight color variation
+        const hue = Math.random() * 60 - 30; // -30 to 30
+        this.color = `hsla(${220 + hue}, 70%, 75%, ${this.opacity})`;
+      }
+
+      update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+
+        // Bounce off edges
+        if (this.x < 0 || this.x > canvas.width) {
+          this.speedX *= -1;
+        }
+
+        if (this.y < 0 || this.y > canvas.height) {
+          this.speedY *= -1;
+        }
+
+        // Random slight changes to movement
+        if (Math.random() < 0.01) {
+          this.speedX += (Math.random() * 0.4 - 0.2);
+          this.speedY += (Math.random() * 0.4 - 0.2);
+
+          // Limit max speed
+          this.speedX = Math.max(Math.min(this.speedX, 1), -1);
+          this.speedY = Math.max(Math.min(this.speedY, 1), -1);
+        }
+      }
+
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+      }
+    }
+
+    // Create connections between particles
+    function connect() {
+      const maxDistance = 150;
+
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < maxDistance) {
+            const opacity = 1 - (distance / maxDistance);
+            ctx.beginPath();
+            ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.2})`;
+            ctx.lineWidth = 1;
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    // Initialize particles
+    for (let i = 0; i < particleCount; i++) {
+      particles.push(new Particle());
+    }
+
+    // Animation loop
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Update and draw particles
+      particles.forEach(particle => {
+        particle.update();
+        particle.draw();
+      });
+
+      connect();
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+  </script>
 </body>
 </html>
